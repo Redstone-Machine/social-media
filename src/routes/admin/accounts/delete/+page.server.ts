@@ -61,8 +61,12 @@ export const actions: Actions = {
     }
 
     try {
-      await prisma.session.deleteMany({
-        where: { userId }
+      await prisma.session.updateMany({
+        where: { userId },
+        data: {
+          userId: null,
+          expiresAt: new Date(0)
+        }
       });
 
       await prisma.user.delete({

@@ -4,9 +4,45 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
+		<meta name="theme-color" content="#3b82f6" />
+		<meta name="description" content="Social media platform for sharing and discovering posts" />
+		<meta name="mobile-web-app-capable" content="true" />
+		<meta name="apple-mobile-web-app-capable" content="true" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta name="apple-mobile-web-app-title" content="Social" />
+		<link rel="apple-touch-icon" href="/icon-192.png" />
+		<link rel="icon" type="image/png" href="/icon-192.png" />
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
 		<div style="display: contents">%sveltekit.body%</div>
+			<script>
+				// Service Worker Registration
+				if ('serviceWorker' in navigator) {
+					window.addEventListener('load', async () => {
+						try {
+							const registration = await navigator.serviceWorker.register('/service-worker.js', {
+								scope: '/'
+							});
+							console.log('Service Worker registered:', registration);
+
+							// Check for updates
+							registration.addEventListener('updatefound', () => {
+								const newWorker = registration.installing;
+								if (newWorker) {
+									newWorker.addEventListener('statechange', () => {
+										if (newWorker.state === 'activated') {
+											// Notify user about update
+											window.dispatchEvent(new CustomEvent('sw-updated'));
+										}
+									});
+								}
+							});
+						} catch (error) {
+							console.error('Service Worker registration failed:', error);
+						}
+					});
+				}
+			</script>
 	</body>
 </html>

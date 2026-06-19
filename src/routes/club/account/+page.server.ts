@@ -105,8 +105,12 @@ export const actions: Actions = {
   deleteAccount: async ({ locals, cookies }) => {
     const user = await requireClubUser(locals);
 
-    await prisma.session.deleteMany({
-      where: { userId: user.id }
+    await prisma.session.updateMany({
+      where: { userId: user.id },
+      data: {
+        userId: null,
+        expiresAt: new Date(0)
+      }
     });
 
     await prisma.user.delete({

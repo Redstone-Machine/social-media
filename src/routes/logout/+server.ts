@@ -8,8 +8,12 @@ export const POST: RequestHandler = async ({ cookies }) => {
   const sessionId = cookies.get(SESSION_COOKIE);
 
   if (sessionId) {
-    await prisma.session.deleteMany({
-      where: { id: sessionId }
+    await prisma.session.updateMany({
+      where: { id: sessionId },
+      data: {
+        userId: null,
+        expiresAt: new Date(0)
+      }
     });
   }
 

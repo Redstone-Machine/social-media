@@ -1,8 +1,8 @@
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-auto';
-import { sveltekit } from '@sveltejs/kit/vite';
 
+import { sveltekit } from '@sveltejs/kit/vite';
 export default defineConfig({
 	plugins: [
 		sveltekit({

@@ -1,12 +1,14 @@
 <script lang="ts">
 	import favicon from '$lib/assets/favicon.svg';
+	import { page } from '$app/stores';
 	import '../app.css';
 	import { onMount } from 'svelte';
 	import { initializeTheme } from '$lib/colors';
 	import ThemeToggle from '$lib/ThemeToggle.svelte';
+
 	import CookieConsent from '$lib/CookieConsent.svelte';
  	import { cookieConsentState } from '$lib/consent';
-
+	import InstallPrompt from '$lib/InstallPrompt.svelte';
 	type LayoutData = {
 		user: {
 			id: string;
@@ -31,6 +33,12 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
+	<link
+		rel="manifest"
+		href={$page.url.pathname === '/login' || data.user
+			? '/manifest-authenticated.json'
+			: '/manifest-public.json'}
+	/>
 </svelte:head>
 
 {#if $cookieConsentState === 'accepted'}
@@ -38,7 +46,9 @@
 {/if}
 
 <div class:blurred={$cookieConsentState === 'pending'}>
-  {#if data.user}
+<InstallPrompt />
+
+	{#if data.user}
 	  <div class="top-left-actions">
 		  <form method="POST" action="/logout" class="logout-form">
 			  <input type="hidden" name="_csrf" value={data.csrfToken} />
