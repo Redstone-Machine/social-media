@@ -8,6 +8,7 @@ import { requireClubUser } from '$lib/server/club';
 
 const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
 const MAX_IMAGES = 20;
+const PRIVATE_POST_UPLOADS_DIRECTORY = path.join(process.cwd(), 'uploads', 'posts');
 
 const ASPECT_PRESETS = {
   square: { width: 1, height: 1, label: '1:1' },
@@ -121,12 +122,19 @@ function parseUploadedAt(value: FormDataEntryValue | null) {
 
 function filePathFromPictureUrl(pictureUrl: string) {
   const cleanUrl = pictureUrl.split('?')[0];
+  const pathPrefix = cleanUrl.startsWith('/media/posts/') ? '/media/posts/' : '/uploads/posts/';
 
-  return path.join(process.cwd(), 'static', cleanUrl.replace(/^\//, ''));
+  if (!cleanUrl.startsWith('/media/posts/') && !cleanUrl.startsWith('/uploads/posts/')) {
+    return null;
+  }
+
+  const relativePath = cleanUrl.slice(pathPrefix.length);
+
+  return path.join(PRIVATE_POST_UPLOADS_DIRECTORY, relativePath);
 }
 
 async function savePostPictures(postId: string, files: File[], cropConfig: CropConfig[]) {
-  const outputDirectory = path.join(process.cwd(), 'static', 'uploads', 'posts', postId);
+  const outputDirectory = path.join(PRIVATE_POST_UPLOADS_DIRECTORY, postId);
   await mkdir(outputDirectory, { recursive: true });
 
   for (const [index, file] of files.entries()) {
@@ -211,7 +219,7 @@ async function savePostPictures(postId: string, files: File[], cropConfig: CropC
         data: {
           id: pictureId,
           postId,
-          pictureUrl: `/uploads/posts/${postId}/${fileName}`
+          pictureUrl: `/media/posts/${postId}/${fileName}`
         }
       });
     } catch {
@@ -223,8 +231,14 @@ async function savePostPictures(postId: string, files: File[], cropConfig: CropC
 async function deletePostPictures(pictureUrls: string[]) {
   await Promise.all(
     pictureUrls.map(async (pictureUrl) => {
+      const filePath = filePathFromPictureUrl(pictureUrl);
+
+      if (!filePath) {
+        return;
+      }
+
       try {
-        await unlink(filePathFromPictureUrl(pictureUrl));
+        await unlink(filePath);
       } catch {
         // Ignore missing files; the DB record will still be removed.
       }
@@ -266,7 +280,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
         aspectKey: normalizeAspectKey(existingDraft.aspectKey),
         pictures: existingDraft.picture.map((picture) => ({
           id: picture.id,
-          pictureUrl: picture.pictureUrl
+          pictureUrl: picture.pictureUrl.replace('/uploads/posts/', '/media/posts/')
         }))
       };
     }
@@ -430,7 +444,8 @@ export const actions: Actions = {
       : await prisma.post.create({
           data: {
             ...data,
-            clubId: club.id
+            clubId: club.id,
+            createdByUsername: user.username
           }
         });
 

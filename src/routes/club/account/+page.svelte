@@ -21,8 +21,43 @@
   } | null;
 
   let { data, form } = $props<{ data: PageData; form: FormState }>();
+  let showReferencedImages = $state(false);
 
   const exportJson = $derived(form?.exportData ? JSON.stringify(form.exportData, null, 2) : '');
+
+  function normalizeImageUrl(url: string) {
+    return url.startsWith('/uploads/posts/') ? url.replace('/uploads/posts/', '/media/posts/') : url;
+  }
+
+  function findReferencedImages(value: unknown) {
+    const urls = new Set<string>();
+
+    function walk(node: unknown) {
+      if (!node || typeof node !== 'object') {
+        return;
+      }
+
+      if (Array.isArray(node)) {
+        for (const item of node) {
+          walk(item);
+        }
+        return;
+      }
+
+      for (const [key, nestedValue] of Object.entries(node)) {
+        if (typeof nestedValue === 'string' && key.toLowerCase().includes('pictureurl') && nestedValue.trim()) {
+          urls.add(normalizeImageUrl(nestedValue.trim()));
+        } else {
+          walk(nestedValue);
+        }
+      }
+    }
+
+    walk(value);
+    return [...urls];
+  }
+
+  const referencedImageUrls = $derived(findReferencedImages(form?.exportData));
 </script>
 
 <svelte:head>
@@ -108,6 +143,30 @@
 
         {#if exportJson}
           <pre class="export">{exportJson}</pre>
+
+          <div class="image-tools">
+            <button type="button" class="secondary" onclick={() => (showReferencedImages = !showReferencedImages)}>
+              {showReferencedImages ? 'Dolj refererade bilder' : 'Visa refererade bilder'}
+            </button>
+          </div>
+
+          {#if showReferencedImages}
+            <div class="image-list" aria-live="polite">
+              {#if referencedImageUrls.length === 0}
+                <p class="subtext">Inga bildlänkar hittades i exportdatan.</p>
+              {:else}
+                {#each referencedImageUrls as imageUrl, index}
+                  <article class="image-row">
+                    <img src={imageUrl} alt={`Refererad bild ${index + 1}`} loading="lazy" />
+                    <div class="image-row-meta">
+                      <p>{imageUrl}</p>
+                      <a href={imageUrl} download class="download-link">Ladda ner</a>
+                    </div>
+                  </article>
+                {/each}
+              {/if}
+            </div>
+          {/if}
         {/if}
       </section>
     </div>
@@ -280,6 +339,65 @@
     justify-content: flex-start;
   }
 
+  .image-tools {
+    margin-top: 0.9rem;
+  }
+
+  .image-list {
+    margin-top: 0.85rem;
+    display: grid;
+    gap: 0.8rem;
+    max-height: 32rem;
+    overflow: auto;
+  }
+
+  .image-row {
+    border: 2px solid #222;
+    border-radius: 0.9rem;
+    background: #f7f7f7;
+    padding: 0.7rem;
+    display: grid;
+    grid-template-columns: 8rem minmax(0, 1fr);
+    gap: 0.8rem;
+    align-items: center;
+  }
+
+  .image-row img {
+    width: 8rem;
+    height: 8rem;
+    object-fit: cover;
+    border-radius: 0.6rem;
+    border: 2px solid #222;
+    background: #ddd;
+  }
+
+  .image-row-meta {
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .image-row-meta p {
+    margin: 0;
+    overflow-wrap: anywhere;
+    font-size: 0.86rem;
+    color: #222;
+  }
+
+  .download-link {
+    border: 2px solid #111;
+    border-radius: 0.7rem;
+    background: #fff;
+    color: #111;
+    text-decoration: none;
+    font-weight: 800;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0.55rem 0.9rem;
+    width: fit-content;
+  }
+
   .error {
     color: var(--color-error);
     font-weight: 700;
@@ -292,6 +410,16 @@
 
     .wide {
       grid-column: auto;
+    }
+
+    .image-row {
+      grid-template-columns: 1fr;
+    }
+
+    .image-row img {
+      width: 100%;
+      height: auto;
+      aspect-ratio: 1 / 1;
     }
   }
 </style>

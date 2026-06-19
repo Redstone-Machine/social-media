@@ -81,6 +81,7 @@ model Post {
   @@index([clubId])
 
   description  String
+  createdByUsername String?
 
   picture    Picture[] @relation("postPictures")
 

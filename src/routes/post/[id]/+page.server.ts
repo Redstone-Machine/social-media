@@ -157,7 +157,7 @@ export const load: PageServerLoad = async ({ locals, params, cookies }) => {
       aspectKey: post.aspectKey,
       pictures: post.picture.map((picture) => ({
         id: picture.id,
-        pictureUrl: picture.pictureUrl
+        pictureUrl: picture.pictureUrl.replace('/uploads/posts/', '/media/posts/')
       }))
     }
   };

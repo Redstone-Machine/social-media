@@ -15,8 +15,8 @@
 
   const actions = [
     { title: 'Skapa ett inlägg', icon: '▣', href: '/club/posts/new' },
-    { title: 'Ladda upp inlägg', icon: '▣' },
-    { title: 'Ta bort inlägg', icon: '✖' },
+    { title: 'Hantera inlägg', icon: '▣', href: '/club/posts' },
+    { title: 'Statistik', icon: '◔', href: '/club/stats' },
     { title: 'Notifikationer', icon: '🔔' },
     { title: 'Klubbinfo', icon: '🗂️', href: '/club/info' },
     { title: 'Kontoinformation', icon: '🗂️', href: '/club/account' }

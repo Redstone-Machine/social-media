@@ -428,6 +428,7 @@
   .post-card {
     display: grid;
     gap: 0;
+    min-width: 0;
   }
 
   .club-meta {
@@ -635,6 +636,7 @@
   .content {
     display: grid;
     gap: 0.8rem;
+    min-width: 0;
   }
 
   .description {
@@ -642,12 +644,19 @@
     line-height: 1.45;
     color: #111;
     font-weight: 600;
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    hyphens: auto;
   }
 
   .content-link {
     color: #0f5bd4;
     text-decoration: underline;
     font-weight: 700;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   @media (max-width: 640px) {
