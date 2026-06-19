@@ -6,6 +6,7 @@
 
   type PageData = {
     clubs: Club[];
+    csrfToken: string;
   };
 
   type FormState = {
@@ -27,6 +28,7 @@
 
     {#if data.clubs.length > 0}
       <form method="POST" class="form-card">
+        <input type="hidden" name="_csrf" value={data.csrfToken} />
         <label>
           Username
           <input name="username" autocomplete="off" placeholder="exempel-användare" />

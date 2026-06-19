@@ -7,6 +7,7 @@
       username: string;
       type: string;
     } | null;
+    csrfToken: string;
   };
 
   let { data } = $props<{ data: PageData }>();
@@ -38,7 +39,8 @@
     const response = await fetch('/api/create-user', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-csrf-token': data.csrfToken
       },
       body: JSON.stringify({ username, password })
     });

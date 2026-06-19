@@ -14,7 +14,7 @@
   let { data } = $props<{ data: PageData }>();
 
   const actions = [
-    { title: 'Skapa ett inlägg', icon: '▣' },
+    { title: 'Skapa ett inlägg', icon: '▣', href: '/club/posts/new' },
     { title: 'Ladda upp inlägg', icon: '▣' },
     { title: 'Ta bort inlägg', icon: '✖' },
     { title: 'Notifikationer', icon: '🔔' },

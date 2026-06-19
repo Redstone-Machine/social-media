@@ -9,6 +9,7 @@ declare global {
 				username: string;
 				type: string;
 			} | null;
+			csrfToken: string;
 		}
 		// interface PageData {}
 		// interface PageState {}

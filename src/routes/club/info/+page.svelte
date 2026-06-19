@@ -21,6 +21,7 @@
       createdAt: string;
       updatedAt: string;
     };
+    csrfToken: string;
   };
 
   type FormState = {
@@ -64,6 +65,7 @@
       <section class="card wide">
         <h2>Byt namn och beskrivning</h2>
         <form method="POST" action="?/saveDetails" class="form-stack">
+          <input type="hidden" name="_csrf" value={data.csrfToken} />
           <label>
             Namn för klubben
             <input name="name" type="text" value={data.club.name} />
@@ -121,6 +123,7 @@
         <p class="subtext">Max 10 MB. Filtyper: HEIC, JPG, PNG, WEBP eller AVIF. Bilden görs om till en kvadrat och sparas som JPG.</p>
 
         <form method="POST" action="?/uploadPicture" enctype="multipart/form-data" class="form-stack">
+          <input type="hidden" name="_csrf" value={data.csrfToken} />
           <label>
             Välj ny bild
             <input

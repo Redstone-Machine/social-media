@@ -9,6 +9,7 @@
 
   type PageData = {
     users: User[];
+    csrfToken: string;
   };
 
   type FormState = {
@@ -52,6 +53,7 @@
                 }
               }}
             >
+              <input type="hidden" name="_csrf" value={data.csrfToken} />
               <input type="hidden" name="userId" value={user.id} />
               <button type="submit" class="delete-button">Ta bort</button>
             </form>

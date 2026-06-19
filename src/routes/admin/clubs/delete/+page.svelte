@@ -7,6 +7,7 @@
 
   type PageData = {
     clubs: Club[];
+    csrfToken: string;
   };
 
   type FormState = {
@@ -45,6 +46,7 @@
                 }
               }}
             >
+              <input type="hidden" name="_csrf" value={data.csrfToken} />
               <input type="hidden" name="clubId" value={club.id} />
               <button type="submit" class="delete-button">Ta bort</button>
             </form>

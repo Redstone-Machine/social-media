@@ -91,6 +91,7 @@ model Post {
 
   sendNotification Boolean @default(true)
   preview Boolean @default(true)
+  aspectKey String @default("portrait")
 
   like       Like[]   @relation("LikePost")
   view       View[]   @relation("ViewPost")

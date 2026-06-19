@@ -13,6 +13,7 @@
 			username: string;
 			type: string;
 		} | null;
+		csrfToken: string;
 	};
 
 	let { children, data } = $props<{ children: unknown; data: LayoutData }>();
@@ -39,7 +40,10 @@
 <div class:blurred={$cookieConsentState === 'pending'}>
   {#if data.user}
 	  <div class="top-left-actions">
-		  <a class="logout-link" href="/logout">Log out</a>
+		  <form method="POST" action="/logout" class="logout-form">
+			  <input type="hidden" name="_csrf" value={data.csrfToken} />
+			  <button type="submit" class="logout-link">Log out</button>
+		  </form>
 		  {#if data.user.type === 'ADMIN'}
 			  <a class="admin-link" href="/admin">Admin page</a>
 		  {/if}
@@ -67,8 +71,13 @@
 		gap: 0.6rem;
 	}
 
+	.logout-form {
+		margin: 0;
+	}
+
 	.logout-link,
 	.admin-link {
+		border: none;
 		padding: 0.65rem 1rem;
 		border-radius: 999px;
 		background: var(--color-primary);

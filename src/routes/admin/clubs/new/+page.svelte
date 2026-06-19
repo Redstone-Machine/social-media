@@ -5,6 +5,7 @@
       username: string;
       type: string;
     };
+    csrfToken: string;
   };
 
   type FormState = {
@@ -25,6 +26,7 @@
     <p class="lead">Skapa en klubb genom att bara ange klubbnamnet.</p>
 
     <form method="POST" class="form-card">
+      <input type="hidden" name="_csrf" value={data.csrfToken} />
       <label>
         Namn för klubben
         <input name="name" placeholder="Exempel IF" autocomplete="off" />

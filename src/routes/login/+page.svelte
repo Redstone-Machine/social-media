@@ -7,6 +7,7 @@
       username: string;
       type: string;
     } | null;
+    csrfToken: string;
   };
 
   let { form, data } = $props<{ form: { error?: string } | null; data: PageData }>();
@@ -25,6 +26,7 @@
     </div>
 
     <form method="POST" use:enhance class="login-form">
+      <input type="hidden" name="_csrf" value={data.csrfToken} />
       <label>
         Username
         <input name="username" autocomplete="username" placeholder="admin" />

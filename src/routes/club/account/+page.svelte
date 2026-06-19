@@ -12,6 +12,7 @@
         pictureUrl: string | null;
       };
     };
+    csrfToken: string;
   };
 
   type FormState = {
@@ -53,6 +54,7 @@
       <section class="card">
         <h2>Byt lösenord</h2>
         <form method="POST" action="?/changePassword" class="form-stack">
+          <input type="hidden" name="_csrf" value={data.csrfToken} />
           <label>
             Gammalt lösenord
             <input name="currentPassword" type="password" autocomplete="current-password" />
@@ -68,6 +70,7 @@
       <section class="card">
         <h2>Byt användarnamn</h2>
         <form method="POST" action="?/changeUsername" class="form-stack">
+          <input type="hidden" name="_csrf" value={data.csrfToken} />
           <label>
             Nytt användarnamn
             <input name="newUsername" type="text" autocomplete="username" value={data.user.username} />
@@ -88,6 +91,7 @@
             }
           }}
         >
+          <input type="hidden" name="_csrf" value={data.csrfToken} />
           <button type="submit" class="danger">Radera konto</button>
         </form>
       </section>
@@ -98,6 +102,7 @@
           Här kan du hämta all information som är sparad om ditt konto och det som är kopplat till din klubb.
         </p>
         <form method="POST" action="?/exportData">
+          <input type="hidden" name="_csrf" value={data.csrfToken} />
           <button type="submit">Begär ut all information om mig</button>
         </form>
 

@@ -4,7 +4,7 @@ import type { RequestHandler } from './$types';
 
 const SESSION_COOKIE = 'session_id';
 
-export const GET: RequestHandler = async ({ cookies }) => {
+export const POST: RequestHandler = async ({ cookies }) => {
   const sessionId = cookies.get(SESSION_COOKIE);
 
   if (sessionId) {
