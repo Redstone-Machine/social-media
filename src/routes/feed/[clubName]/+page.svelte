@@ -1,16 +1,26 @@
 <script lang="ts">
+  import { enhance } from '$app/forms';
   import { goto } from '$app/navigation';
+  import type { SubmitFunction } from '@sveltejs/kit';
+
+  type AspectKey = 'square' | 'portrait' | 'tall';
 
   type PostCard = {
     id: string;
     description: string;
+    aspectKey: AspectKey;
     uploadedAt: string;
-    firstPictureUrl: string | null;
+    pictures: Array<{
+      id: string;
+      pictureUrl: string;
+    }>;
     likeCount: number;
     viewCount: number;
+    likedBySession: boolean;
   };
 
   type PageData = {
+    csrfToken: string;
     club: {
       id: string;
       name: string;
@@ -31,22 +41,173 @@
   const logoTransitionName = $derived(
     `club-logo-${data.club.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'unknown'}`
   );
+  let likeState = $state<Record<string, { liked: boolean; count: number }>>({});
+  let shareStatusByPost = $state<Record<string, string>>({});
+  let activeIndexByPost = $state<Record<string, number>>({});
 
-  function formatDate(value: string) {
-    return new Intl.DateTimeFormat('sv-SE', {
-      dateStyle: 'medium',
-      timeStyle: 'short'
-    }).format(new Date(value));
-  }
+  $effect(() => {
+    likeState = Object.fromEntries(
+      data.posts.map((post) => [post.id, { liked: post.likedBySession, count: post.likeCount }])
+    );
+  });
 
-  function descriptionPreview(text: string) {
-    const compact = text.replace(/\s+/g, ' ').trim();
-
-    if (compact.length <= 170) {
-      return compact;
+  function getPostAspectRatio(aspectKey: AspectKey) {
+    if (aspectKey === 'square') {
+      return '1 / 1';
     }
 
-    return `${compact.slice(0, 170)}...`;
+    if (aspectKey === 'tall') {
+      return '9 / 16';
+    }
+
+    return '4 / 5';
+  }
+
+  function currentLikeState(postId: string, fallbackLiked: boolean, fallbackCount: number) {
+    return likeState[postId] ?? { liked: fallbackLiked, count: fallbackCount };
+  }
+
+  function currentIndex(postId: string, totalPictures: number) {
+    if (totalPictures <= 1) {
+      return 0;
+    }
+
+    const stored = activeIndexByPost[postId] ?? 0;
+    return Math.min(Math.max(stored, 0), totalPictures - 1);
+  }
+
+  function currentPicture(
+    postId: string,
+    pictures: Array<{ id: string; pictureUrl: string }>
+  ): { id: string; pictureUrl: string } | null {
+    if (!pictures.length) {
+      return null;
+    }
+
+    return pictures[currentIndex(postId, pictures.length)] ?? pictures[0];
+  }
+
+  function goToSlide(postId: string, totalPictures: number, nextIndex: number) {
+    if (totalPictures <= 1) {
+      return;
+    }
+
+    activeIndexByPost = {
+      ...activeIndexByPost,
+      [postId]: Math.min(Math.max(nextIndex, 0), totalPictures - 1)
+    };
+  }
+
+  function goPrevious(postId: string, totalPictures: number) {
+    if (totalPictures <= 1) {
+      return;
+    }
+
+    const current = currentIndex(postId, totalPictures);
+    goToSlide(postId, totalPictures, current === 0 ? totalPictures - 1 : current - 1);
+  }
+
+  function goNext(postId: string, totalPictures: number) {
+    if (totalPictures <= 1) {
+      return;
+    }
+
+    const current = currentIndex(postId, totalPictures);
+    goToSlide(postId, totalPictures, current === totalPictures - 1 ? 0 : current + 1);
+  }
+
+  function formatPublishedLabel(value: string) {
+    const date = new Date(value);
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    const diffHours = Math.round(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    const rtf = new Intl.RelativeTimeFormat('sv-SE', { numeric: 'auto' });
+
+    if (Math.abs(diffHours) < 24) {
+      return `publicerades ${rtf.format(diffHours, 'hour')}`;
+    }
+
+    return `publicerades ${rtf.format(diffDays, 'day')}`;
+  }
+
+  function setShareStatus(postId: string, message: string) {
+    shareStatusByPost = {
+      ...shareStatusByPost,
+      [postId]: message
+    };
+  }
+
+  const handleLikeSubmit = (postId: string, fallbackLiked: boolean, fallbackCount: number): SubmitFunction => {
+    const previous = currentLikeState(postId, fallbackLiked, fallbackCount);
+
+    const optimistic = {
+      liked: !previous.liked,
+      count: Math.max(0, previous.count + (previous.liked ? -1 : 1))
+    };
+
+    likeState = {
+      ...likeState,
+      [postId]: optimistic
+    };
+
+    return async ({ result }) => {
+      if (result.type === 'failure' || result.type === 'error') {
+        likeState = {
+          ...likeState,
+          [postId]: previous
+        };
+        return;
+      }
+
+      if (result.type === 'success') {
+        const responseData = result.data as {
+          postId?: string;
+          likedBySession?: boolean;
+          likeCount?: number;
+        };
+
+        if (responseData.postId === postId) {
+          likeState = {
+            ...likeState,
+            [postId]: {
+              liked: responseData.likedBySession ?? optimistic.liked,
+              count: responseData.likeCount ?? optimistic.count
+            }
+          };
+        }
+      }
+    };
+  };
+
+  async function sharePost(postId: string) {
+    const shareUrl = `${window.location.origin}/post/${postId}`;
+    setShareStatus(postId, '');
+
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: `${data.club.name} - inlägg`,
+          url: shareUrl
+        });
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return;
+        }
+      }
+    }
+
+    if (navigator.clipboard) {
+      const shouldCopy = window.confirm('Kunde inte öppna delningsmenyn. Vill du kopiera länken i stället?');
+      if (shouldCopy) {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareStatus(postId, 'Länken kopierades till urklipp.');
+      }
+      return;
+    }
+
+    setShareStatus(postId, 'Kunde inte öppna delningsmenyn på den här enheten.');
   }
 
   async function navigateWithTransition(event: MouseEvent) {
@@ -95,25 +256,134 @@
     {:else}
       <section class="post-list" aria-label={`Flöde för ${data.club.name}`}>
         {#each data.posts as post}
-          <article class="post-card">
-            <a class="post-link" href={`/post/${post.id}`} aria-label={`Öppna inlägg ${post.id}`}>
-              <div class="post-image" aria-hidden="true">
-                {#if post.firstPictureUrl}
-                  <img src={post.firstPictureUrl} alt="" loading="lazy" />
+          <article class="post-item">
+            <a class="image-link" href={`/post/${post.id}`} aria-label={`Öppna inlägg ${post.id}`}>
+              <div class="image-stage" style={`aspect-ratio: ${getPostAspectRatio(post.aspectKey)};`} aria-hidden="true">
+                <div class="image-overlay-top">
+                  <div class="club-meta">
+                    <div class="club-badge" aria-label={data.club.name}>
+                      {#if data.club.pictureUrl}
+                        <img src={data.club.pictureUrl} alt={data.club.name} />
+                      {:else}
+                        <span>{data.club.name.slice(0, 2).toUpperCase()}</span>
+                      {/if}
+                    </div>
+                    <strong>{data.club.name}</strong>
+                  </div>
+                </div>
+
+                {#if currentPicture(post.id, post.pictures)}
+                  <img
+                    class="main-image"
+                    src={currentPicture(post.id, post.pictures)?.pictureUrl}
+                    alt=""
+                    loading="lazy"
+                  />
                 {:else}
-                  <span>Ingen bild</span>
+                  <span class="no-image">Ingen bild</span>
+                {/if}
+
+                {#if post.pictures.length > 1}
+                  <button
+                    type="button"
+                    class="nav-arrow left"
+                    onclick={(e) => {
+                        e.preventDefault();
+                        goPrevious(post.id, post.pictures.length);
+                    }}
+                    aria-label="Föregående bild"
+                  >
+                    &#8249;
+                  </button>
+
+                  <button
+                    type="button"
+                    class="nav-arrow right"
+                    onclick={(e) => {
+                        e.preventDefault();
+                        goNext(post.id, post.pictures.length);
+                    }}
+                    aria-label="Nästa bild"
+                  >
+                    &#8250;
+                  </button>
+
+                  <div class="dot-row" aria-label="Bildposition">
+                    {#each post.pictures as _, index}
+                      <button
+                        type="button"
+                        class="dot"
+                        class:active={index === currentIndex(post.id, post.pictures.length)}
+                        onclick={(e) => {
+                            e.preventDefault();
+                            goToSlide(post.id, post.pictures.length, index);
+                        }}
+                        aria-label={`Gå till bild ${index + 1}`}
+                      ></button>
+                    {/each}
+                  </div>
                 {/if}
               </div>
+            </a>
 
-              <div class="post-body">
-                <p class="description">{descriptionPreview(post.description)}</p>
-                <p class="meta">{formatDate(post.uploadedAt)}</p>
-                <div class="stats" aria-label="Statistik">
-                  <span aria-label={`Visningar ${post.viewCount}`}>&#128065; {post.viewCount}</span>
-                  <span aria-label={`Gillningar ${post.likeCount}`}>&#9829; {post.likeCount}</span>
+            <div class="content">
+              <div class="meta-row">
+                <p class="published-label">{formatPublishedLabel(post.uploadedAt)}</p>
+
+                <div class="icons">
+                  <div class="like-group">
+                    <form
+                      method="POST"
+                      action="?/toggleLike"
+                      use:enhance={handleLikeSubmit(post.id, post.likedBySession, post.likeCount)}
+                    >
+                      <input type="hidden" name="_csrf" value={data.csrfToken} />
+                      <input type="hidden" name="postId" value={post.id} />
+                      <button
+                        type="submit"
+                        class="like-button"
+                        aria-label={currentLikeState(post.id, post.likedBySession, post.likeCount).liked
+                          ? 'Ta bort gilla-markering'
+                          : 'Gilla inlägg'}
+                      >
+                        <span
+                          class="glyph heart-glyph"
+                          class:liked={currentLikeState(post.id, post.likedBySession, post.likeCount).liked}
+                          aria-hidden="true"
+                        ></span>
+                        {#if currentLikeState(post.id, post.likedBySession, post.likeCount).count > 0}
+                          <span class="like-count">
+                            {currentLikeState(post.id, post.likedBySession, post.likeCount).count}
+                          </span>
+                        {/if}
+                      </button>
+                    </form>
+                  </div>
+
+                  <a
+                    class="download-button"
+                    href={currentPicture(post.id, post.pictures)?.pictureUrl ?? '#'}
+                    download
+                    aria-label="Ladda ner bild"
+                    aria-disabled={!currentPicture(post.id, post.pictures)}
+                  >
+                    <span class="glyph download-glyph" aria-hidden="true"></span>
+                  </a>
+
+                  <button type="button" class="share-button" onclick={() => sharePost(post.id)} aria-label="Dela inlägg">
+                    <span class="glyph share-glyph" aria-hidden="true"></span>
+                  </button>
                 </div>
               </div>
-            </a>
+
+              {#if shareStatusByPost[post.id]}
+                <p class="share-status">{shareStatusByPost[post.id]}</p>
+              {/if}
+
+              <a class="description-link" href={`/post/${post.id}`} aria-label={`Öppna inlägg ${post.id}`}>
+                <p class="description">{post.description}</p>
+              </a>
+            </div>
           </article>
         {/each}
       </section>
@@ -123,18 +393,15 @@
 
 <style>
   .feed-shell {
-    min-height: 100vh;
-    padding: 1.5rem 1rem 4rem;
+    min-height: calc(100vh - 4rem);
+    padding: 2rem 1.5rem 4rem;
     display: grid;
     place-items: start center;
-    background:
-      radial-gradient(circle at 85% 8%, rgba(249, 115, 22, 0.15), transparent 24%),
-      radial-gradient(circle at 12% 88%, rgba(6, 182, 212, 0.16), transparent 34%),
-      linear-gradient(180deg, #fffaf5 0%, #ffffff 45%, #f7fdff 100%);
+    background-color: var(--color-background-color);
   }
 
   .feed-panel {
-    width: min(100%, 34rem);
+    width: min(100%, 32rem);
     display: grid;
     gap: 1rem;
   }
@@ -158,17 +425,16 @@
   }
 
   .club-logo {
-    width: 4.75rem;
-    height: 4.75rem;
+    width: 3.25rem;
+    height: 3.25rem;
     border-radius: 50%;
     overflow: hidden;
     display: grid;
     place-items: center;
     color: white;
     font-weight: 900;
-    background: linear-gradient(140deg, #ef4444, #fb7185);
-    box-shadow: 0 14px 28px rgba(239, 68, 68, 0.3);
-    animation: logo-in 420ms ease;
+    background: #ef4444;
+    border: 3px solid #111;
   }
 
   .club-logo img {
@@ -179,7 +445,7 @@
 
   .club-header-copy h1 {
     font-size: clamp(1.7rem, 4vw, 2.3rem);
-    color: #1f2937;
+    color: var(--color-general-text);
     line-height: 1.04;
   }
 
@@ -196,10 +462,10 @@
   .empty-card {
     padding: 1.2rem;
     border-radius: 1rem;
-    border: 1px dashed var(--color-gray-300);
-    background: rgba(255, 255, 255, 0.78);
+    border: 3px solid #111;
+    background: #efefef;
     text-align: center;
-    color: var(--color-text-secondary);
+    color: var(--color-general-text);
   }
 
   .empty-card h2 {
@@ -210,71 +476,253 @@
 
   .post-list {
     display: grid;
-    gap: 1rem;
+    gap: 0;
   }
 
-  .post-card {
-    border-radius: 1.05rem;
-    overflow: hidden;
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    background: rgba(255, 255, 255, 0.88);
-    box-shadow: 0 14px 24px rgba(15, 23, 42, 0.08);
+  .post-item {
+    display: grid;
+    gap: 0;
+    min-width: 0;
+    padding-bottom: 1.2rem;
+    margin-bottom: 1.2rem;
+    border-bottom: 1px solid var(--color-gray-300);
   }
 
-  .post-link {
+  .post-item:last-child {
+    margin-bottom: 0;
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .image-link,
+  .description-link {
     color: inherit;
     text-decoration: none;
-    display: grid;
   }
 
-  .post-image {
+  .image-stage {
     width: 100%;
     aspect-ratio: 4 / 5;
-    background: linear-gradient(160deg, #f3f4f6, #e5e7eb);
+    background: #d1d1d1;
     display: grid;
     place-items: center;
-    color: var(--color-text-secondary);
-    font-weight: 700;
+    overflow: hidden;
+    position: relative;
   }
 
-  .post-image img {
+  .image-overlay-top {
+    position: absolute;
+    top: 0.75rem;
+    left: 0.75rem;
+    right: 0.75rem;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    z-index: 2;
+  }
+
+  .club-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 1rem;
+    color: var(--color-account-name-color);
+    font-weight: 900;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  }
+
+  .club-badge {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    background: #ef4444;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 900;
+  }
+
+  .club-badge img {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
 
-  .post-body {
+  .main-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .no-image {
+    color: var(--color-general-text);
+    font-weight: 700;
+  }
+
+  .content {
     display: grid;
-    gap: 0.55rem;
-    padding: 0.85rem 0.9rem 0.95rem;
+    gap: 0.8rem;
+    min-width: 0;
+    margin-top: 0.35rem;
+    padding: 0 0.1rem 0;
   }
 
   .description {
-    color: #1f2937;
+    font-size: 1rem;
+    line-height: 1.45;
+    color: var(--color-general-text);
+    font-weight: 600;
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    hyphens: auto;
   }
 
-  .meta {
-    color: var(--color-text-secondary);
-    font-size: 0.85rem;
-  }
-
-  .stats {
+  .meta-row {
     display: flex;
-    gap: 0.8rem;
-    color: var(--color-text-secondary);
-    font-size: 0.88rem;
+    justify-content: flex-end;
+    gap: 1rem;
+    align-items: flex-start;
+    min-height: 2.2rem;
+    margin-top: 0.2rem;
+    padding-top: 0.1rem;
   }
 
-  @keyframes logo-in {
-    from {
-      transform: translateY(-10px);
-      opacity: 0;
-    }
+  .published-label {
+    color: var(--color-faded-text);
+    font-size: 0.95rem;
+    font-weight: 800;
+    margin: 0;
+    margin-right: auto;
+    line-height: 1.15;
+    align-self: flex-start;
+  }
 
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
+  .nav-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 999px;
+    border: 0;
+    background: rgba(0, 0, 0, 0.45);
+    color: white;
+    font-size: 1.55rem;
+    display: grid;
+    place-items: center;
+    z-index: 2;
+  }
+
+  .nav-arrow.left {
+    left: 0.6rem;
+  }
+
+  .nav-arrow.right {
+    right: 0.6rem;
+  }
+
+  .dot-row {
+    position: absolute;
+    bottom: 0.6rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 0.35rem;
+    z-index: 2;
+  }
+
+  .dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    border: 0;
+    background: rgba(255, 255, 255, 0.52);
+    padding: 0;
+  }
+
+  .dot.active {
+    background: white;
+  }
+
+  .icons {
+    display: flex;
+    gap: 0.65rem;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .like-group {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .glyph {
+    display: block;
+    width: 1.7rem;
+    height: 1.7rem;
+    background-color: var(--color-glyph-color);
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+    -webkit-mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+  }
+
+  .heart-glyph {
+    mask-image: url('/glyphs/heart-icon.svg');
+    -webkit-mask-image: url('/glyphs/heart-icon.svg');
+    transform: translateY(0.05em);
+  }
+
+  .heart-glyph.liked {
+    background-color: var(--color-heart-with-color);
+  }
+
+  .download-glyph {
+    mask-image: url('/glyphs/download-icon.svg');
+    -webkit-mask-image: url('/glyphs/download-icon.svg');
+  }
+
+  .share-glyph {
+    mask-image: url('/glyphs/share-icon.svg');
+    -webkit-mask-image: url('/glyphs/share-icon.svg');
+  }
+
+  .like-button,
+  .download-button,
+  .share-button {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    text-decoration: none;
+    display: inline-grid;
+    place-items: center;
+    line-height: 0;
+  }
+
+  .like-button {
+    grid-auto-flow: column;
+    gap: 0.35rem;
+    align-items: center;
+  }
+
+  .like-count {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--color-faded-text);
+    min-width: 1ch;
+  }
+
+  .share-status {
+    font-size: 0.92rem;
+    color: #666;
   }
 
   @media (min-width: 760px) {
@@ -287,8 +735,49 @@
       text-align: left;
     }
 
-    .club-header-copy {
-      display: block;
+    .club-header-copy,
+    .club-header-copy p {
+      display: none;
+    }
+
+    .club-header-copy h1 {
+      display: none;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .feed-shell {
+      padding-inline: 0;
+      padding-top: 1rem;
+    }
+
+    .feed-panel {
+      width: 100%;
+    }
+
+    .feed-header,
+    .content {
+      padding-inline: 0.75rem;
+    }
+
+    .image-stage {
+      width: 100vw;
+      margin-left: calc(50% - 50vw);
+      margin-right: calc(50% - 50vw);
+      border-radius: 0;
+    }
+
+    .meta-row {
+      width: 100vw;
+      margin-left: calc(50% - 50vw);
+      margin-right: calc(50% - 50vw);
+      box-sizing: border-box;
+      padding: 0.1rem 0.75rem 0;
+    }
+
+    .post-item {
+      padding-bottom: 1rem;
+      margin-bottom: 1rem;
     }
   }
 </style>

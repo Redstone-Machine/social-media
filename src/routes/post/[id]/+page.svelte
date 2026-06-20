@@ -92,6 +92,10 @@
   }
 
   function handleTouchStart(event: TouchEvent) {
+    if (data.post.pictures.length <= 1) {
+      return;
+    }
+
     if (event.touches.length !== 1) {
       return;
     }
@@ -105,6 +109,10 @@
   }
 
   function handleTouchMove(event: TouchEvent) {
+    if (data.post.pictures.length <= 1) {
+      return;
+    }
+
     if (event.touches.length !== 1) {
       return;
     }
@@ -121,6 +129,12 @@
   }
 
   function handleTouchEnd(event: TouchEvent) {
+    if (data.post.pictures.length <= 1) {
+      swipeOffsetPct = 0;
+      swipeTransition = true;
+      return;
+    }
+
     swipeTransition = true;
 
     if (event.changedTouches.length !== 1) {
@@ -156,46 +170,29 @@
   async function sharePost() {
     const shareUrl = window.location.href;
     shareStatus = '';
-    const shareData = {
-      title: `${data.viewer.club.name} - inlägg`,
-      text: data.post.description.slice(0, 140),
-      url: shareUrl
-    };
 
-    try {
-      if (typeof navigator.share === 'function') {
-        const canShare = typeof navigator.canShare === 'function' ? navigator.canShare({ url: shareUrl }) : true;
-
-        if (canShare) {
-          await navigator.share(shareData);
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: `${data.viewer.club.name} - inlägg`,
+          url: shareUrl
+        });
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
           return;
         }
       }
+    }
 
-      if (navigator.clipboard) {
-        const shouldCopy = window.confirm('Kunde inte öppna delningsmenyn. Vill du kopiera länken i stället?');
-
-        if (shouldCopy) {
-          await navigator.clipboard.writeText(shareUrl);
-          shareStatus = 'Länken kopierades till urklipp.';
-        } else {
-          shareStatus = 'Delningen avbröts.';
-        }
-      } else {
-        shareStatus = 'Kunde inte öppna delningsmenyn eller kopiera länken på den här enheten.';
+    if (navigator.clipboard) {
+      const shouldCopy = window.confirm('Kunde inte öppna delningsmenyn. Vill du kopiera länken i stället?');
+      if (shouldCopy) {
+        await navigator.clipboard.writeText(shareUrl);
+        shareStatus = 'Länken kopierades till urklipp.';
       }
-    } catch {
-      if (navigator.clipboard) {
-        const shouldCopy = window.confirm('Delning misslyckades. Vill du kopiera länken i stället?');
-
-        if (shouldCopy) {
-          await navigator.clipboard.writeText(shareUrl);
-          shareStatus = 'Länken kopierades till urklipp.';
-          return;
-        }
-      }
-
-      shareStatus = 'Delningen avbröts eller kunde inte slutföras.';
+    } else {
+      shareStatus = 'Kunde inte öppna delningsmenyn på den här enheten.';
     }
   }
 
@@ -313,18 +310,24 @@
 
         <div class="icons">
           {#if !isDraft}
-            <form method="POST" action="?/toggleLike" use:enhance={handleLikeSubmit} bind:this={likeForm}>
-              <input type="hidden" name="_csrf" value={data.csrfToken} />
-              <button type="submit" class="like-button" aria-label={likedBySession ? 'Ta bort gilla-markering' : 'Gilla inlägg'}>
-                <span class:liked={likedBySession} class="heart" aria-hidden="true">&#9829;</span>
-              </button>
-            </form>
-            {#if likeCount > 0}
-              <span class="like-count">{likeCount}</span>
-            {/if}
+            <div class="like-group">
+              <form method="POST" action="?/toggleLike" use:enhance={handleLikeSubmit} bind:this={likeForm}>
+                <input type="hidden" name="_csrf" value={data.csrfToken} />
+                <button type="submit" class="like-button" aria-label={likedBySession ? 'Ta bort gilla-markering' : 'Gilla inlägg'}>
+                  <span class="glyph heart-glyph" class:liked={likedBySession} aria-hidden="true"></span>
+                  {#if likeCount > 0}
+                    <span class="like-count">{likeCount}</span>
+                  {/if}
+                </button>
+              </form>
+            </div>
           {/if}
-          <a class="download-button" href={activePicture?.pictureUrl ?? '#'} download aria-label="Ladda ner bild">&#8681;</a>
-          <button type="button" class="share-button" onclick={sharePost} aria-label="Dela inlägg">&#8682;</button>
+          <a class="download-button" href={activePicture?.pictureUrl ?? '#'} download aria-label="Ladda ner bild">
+            <span class="glyph download-glyph" aria-hidden="true"></span>
+          </a>
+          <button type="button" class="share-button" onclick={sharePost} aria-label="Dela inlägg">
+            <span class="glyph share-glyph" aria-hidden="true"></span>
+          </button>
         </div>
       </div>
 
@@ -354,6 +357,7 @@
     padding: 2rem 1.5rem 4rem;
     display: grid;
     place-items: start center;
+    background-color: var(--color-background-color);
   }
 
   .post-panel {
@@ -436,7 +440,7 @@
     align-items: center;
     gap: 0.6rem;
     font-size: 1rem;
-    color: white;
+    color: var(--color-account-name-color);
     font-weight: 900;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
   }
@@ -575,7 +579,7 @@
   }
 
   .published-label {
-    color: #888;
+    color: var(--color-faded-text);
     font-size: 0.95rem;
     font-weight: 800;
     margin: 0;
@@ -587,20 +591,47 @@
   .icons {
     display: flex;
     gap: 0.65rem;
-    align-items: flex-start;
-    color: #666;
-    font-size: 2rem;
-    line-height: 1;
+    align-items: center;
     justify-content: flex-end;
-    padding-top: 0.1rem;
   }
 
-  .heart {
-    color: #a0a0a0;
+  .like-group {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
   }
 
-  .heart.liked {
-    color: #ff5e3a;
+  .glyph {
+    display: block;
+    width: 1.7rem;
+    height: 1.7rem;
+    background-color: var(--color-glyph-color);
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+    -webkit-mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+  }
+
+  .heart-glyph {
+    mask-image: url('/glyphs/heart-icon.svg');
+    -webkit-mask-image: url('/glyphs/heart-icon.svg');
+    transform: translateY(0.05em);
+  }
+
+  .heart-glyph.liked {
+    background-color: var(--color-heart-with-color);
+  }
+
+  .download-glyph {
+    mask-image: url('/glyphs/download-icon.svg');
+    -webkit-mask-image: url('/glyphs/download-icon.svg');
+  }
+
+  .share-glyph {
+    mask-image: url('/glyphs/share-icon.svg');
+    -webkit-mask-image: url('/glyphs/share-icon.svg');
   }
 
   .like-button,
@@ -608,24 +639,24 @@
   .share-button {
     border: 0;
     background: transparent;
-    color: inherit;
     padding: 0;
-    font-size: inherit;
-    line-height: 1;
     text-decoration: none;
     display: inline-grid;
     place-items: center;
+    line-height: 0;
+  }
+
+  .like-button {
+    grid-auto-flow: column;
+    gap: 0.35rem;
+    align-items: center;
   }
 
   .like-count {
     font-size: 1rem;
     font-weight: 800;
-    color: #444;
+    color: var(--color-faded-text);
     min-width: 1ch;
-  }
-
-  .download-button {
-    color: #111;
   }
 
   .share-status {
@@ -637,12 +668,13 @@
     display: grid;
     gap: 0.8rem;
     min-width: 0;
+    margin-top: 0.9rem;
   }
 
   .description {
     font-size: 1rem;
     line-height: 1.45;
-    color: #111;
+    color: var(--color-general-text);
     font-weight: 600;
     margin: 0;
     white-space: pre-wrap;
